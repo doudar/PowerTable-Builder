@@ -1,0 +1,2 @@
+<!-- This is a placeholder for the SmartSpin2k header image. 
+     Please save your PNG image as "smartspin2k-header.png" in this directory. -->
