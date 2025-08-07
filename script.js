@@ -11,6 +11,7 @@ class PowerTableBuilder {
         this.tableMultiplier = 10;
         this.activeCadence = null;
         this.chart = null;
+        this.powerLevels = []; // Store all watt columns from header
         this.cadenceColors = [
             '#9C27B0', // Purple
             '#3F51B5', // Indigo
@@ -307,6 +308,9 @@ class PowerTableBuilder {
         // Parse header to get power levels
         const headerLine = lines[1];
         const powerLevels = headerLine.split(',').slice(1).map(p => parseInt(p.replace('W', '')));
+        
+        // Store power levels for use in SmartFill
+        this.powerLevels = [...powerLevels]; // Create a copy
 
         // Clear existing data
         this.data.clear();
@@ -918,7 +922,12 @@ class PowerTableBuilder {
             return;
         }
 
-        if (!confirm('SmartFill will automatically complete all missing data points at existing watt columns. This action can be undone. Continue?')) {
+        if (this.powerLevels.length === 0) {
+            this.showError('No watt columns found from header. Please upload a valid .ptab file first.');
+            return;
+        }
+
+        if (!confirm('SmartFill will automatically complete all missing data points at all watt columns from the header. This will calculate resistance values up to the highest watt column defined in the original file. This action can be undone. Continue?')) {
             return;
         }
 
@@ -928,20 +937,8 @@ class PowerTableBuilder {
         let totalPointsAdded = 0;
         let totalCellsChecked = 0;
 
-        // Get all unique watt values across all cadences (existing columns only)
-        const allWatts = new Set();
-        for (const cadenceData of this.data.values()) {
-            for (const watts of cadenceData.keys()) {
-                allWatts.add(watts);
-            }
-        }
-        
-        if (allWatts.size === 0) {
-            this.showError('No existing data points found to interpolate from.');
-            return;
-        }
-
-        const sortedAllWatts = Array.from(allWatts).sort((a, b) => a - b);
+        // Use all watt values from the original header
+        const sortedAllWatts = [...this.powerLevels].sort((a, b) => a - b);
         const sortedCadences = Array.from(this.data.keys()).sort((a, b) => a - b);
 
         console.log('SmartFill starting:', {
@@ -951,7 +948,7 @@ class PowerTableBuilder {
             cadences: sortedCadences
         });
 
-        // For each cadence, fill in missing data at existing watt columns
+        // For each cadence, fill in missing data at all watt columns from header
         for (const cadence of sortedCadences) {
             const cadenceData = this.data.get(cadence);
             const existingWatts = Array.from(cadenceData.keys()).sort((a, b) => a - b);
@@ -966,7 +963,7 @@ class PowerTableBuilder {
                 existingWatts: existingWatts
             });
 
-            // For each existing watt column in the global data
+            // For each watt column in the header
             for (const watts of sortedAllWatts) {
                 totalCellsChecked++;
                 
@@ -1425,15 +1422,17 @@ class PowerTableBuilder {
         // Generate metadata line
         let content = `# METADATA:HMax=${this.maxResistance}\n`;
         
-        // Find all unique power levels
-        const allWatts = new Set();
-        for (const cadenceData of this.data.values()) {
-            for (const watts of cadenceData.keys()) {
-                allWatts.add(watts);
+        // Use the original power levels from the header to maintain column structure
+        const sortedWatts = this.powerLevels.length > 0 ? [...this.powerLevels].sort((a, b) => a - b) : (() => {
+            // Fallback: Find all unique power levels from data if powerLevels is empty
+            const allWatts = new Set();
+            for (const cadenceData of this.data.values()) {
+                for (const watts of cadenceData.keys()) {
+                    allWatts.add(watts);
+                }
             }
-        }
-        
-        const sortedWatts = Array.from(allWatts).sort((a, b) => a - b);
+            return Array.from(allWatts).sort((a, b) => a - b);
+        })();
         
         // Generate header
         const header = ['Cadence/Power', ...sortedWatts.map(w => `${w}W`)];
